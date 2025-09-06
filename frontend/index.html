@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agri-Loop Agent Demo</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; padding: 20px; max-width: 800px; margin: auto; background-color: #f4f4f4; }
+        h1, h2 { color: #333; }
+        #container { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        form { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 5px; }
+        input[type="text"], textarea { width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ddd; }
+        button { background-color: #28a745; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; }
+        button:disabled { background-color: #ccc; }
+        #results { margin-top: 20px; padding: 15px; border: 1px solid #eee; border-radius: 4px; background-color: #e9f7ef; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>🌾 Agri-Loop Agent Demo</h1>
+        <p>Submit a farmer's crop issue to get a diagnosis.</p>
+
+        <form id="issue-form">
+            <h2>1. Submit an Issue</h2>
+            <div>
+                <label for="farmer_id">Farmer ID (e.g., +15551234567):</label>
+                <input type="text" id="farmer_id" name="farmer_id" required>
+            </div>
+            <div>
+                <label for="text">Describe the issue (e.g., "My plant's leaves are yellow"):</label>
+                <textarea id="text" name="text" rows="3" required></textarea>
+            </div>
+            <button type="submit" id="submit-btn">Submit Issue</button>
+        </form>
+
+        <div id="diagnosis-section" style="display: none;">
+            <h2>2. Get Diagnosis</h2>
+            <p>Issue submitted successfully! Ready to diagnose.</p>
+            <button id="diagnose-btn">Diagnose</button>
+        </div>
+
+        <div id="results-section" style="display: none;">
+            <h2>3. Results</h2>
+            <div id="results"></div>
+        </div>
+
+        <div id="error-message" class="error"></div>
+    </div>
+
+    <script>
+        const issueForm = document.getElementById('issue-form');
+        const submitBtn = document.getElementById('submit-btn');
+        const diagnosisSection = document.getElementById('diagnosis-section');
+        const diagnoseBtn = document.getElementById('diagnose-btn');
+        const resultsSection = document.getElementById('results-section');
+        const resultsDiv = document.getElementById('results');
+        const errorDiv = document.getElementById('error-message');
+
+        let currentInputId = null;
+
+        issueForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorDiv.textContent = '';
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting...';
+
+            const formData = new FormData(issueForm);
+            const data = Object.fromEntries(formData.entries());
+
+            try {
+                const response = await fetch('/api/ingest/text', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                currentInputId = result.id;
+
+                issueForm.style.display = 'none';
+                diagnosisSection.style.display = 'block';
+
+            } catch (error) {
+                console.error('Error submitting issue:', error);
+                errorDiv.textContent = 'Failed to submit issue. Please check the console for details.';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Issue';
+            }
+        });
+
+        diagnoseBtn.addEventListener('click', async () => {
+            if (!currentInputId) return;
+
+            errorDiv.textContent = '';
+            diagnoseBtn.disabled = true;
+            diagnoseBtn.textContent = 'Diagnosing...';
+
+            try {
+                const response = await fetch(`/api/diagnose/${currentInputId}`, {
+                    method: 'POST',
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                resultsDiv.innerHTML = `
+                    <p><strong>Diagnosis:</strong> ${result.diagnosis}</p>
+                    <p><strong>Action:</strong> A message was sent to ${result.action_taken.recipient} with status: ${result.action_taken.status}.</p>
+                `;
+
+                diagnosisSection.style.display = 'none';
+                resultsSection.style.display = 'block';
+
+            } catch (error) {
+                console.error('Error getting diagnosis:', error);
+                errorDiv.textContent = 'Failed to get diagnosis. Please check the console for details.';
+                diagnoseBtn.disabled = false;
+                diagnoseBtn.textContent = 'Diagnose';
+            }
+        });
+    </script>
+</body>
+</html>
