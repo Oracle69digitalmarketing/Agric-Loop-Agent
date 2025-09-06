@@ -1,39 +1,21 @@
-# backend/database.py
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, declarative_base
 
-"""
-This module will contain all the database connection logic and session management
-for interacting with the TiDB database.
+# Define the database URL for SQLite.
+# The database will be created in the root of the project directory.
+# The "check_same_thread" argument is needed only for SQLite. It's required
+# because FastAPI can use multiple threads for a single request, and SQLite
+# by default doesn't allow this.
+SQLALCHEMY_DATABASE_URL = "sqlite:///./agri_loop.db"
 
-For now, it contains placeholder configurations. In a real-world scenario,
-these settings would be loaded from environment variables or a config file.
-"""
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
+)
 
-TIDB_CONFIG = {
-    "host": "127.0.0.1",
-    "port": 4000,
-    "user": "root",
-    "password": "",
-    "database": "agri_loop",
-}
+# Each instance of the SessionLocal class will be a database session.
+# The class itself is not a session yet, but will create one when instantiated.
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-def get_db_connection():
-    """
-    Placeholder function to get a database connection.
-    In the future, this will establish and return a connection to TiDB.
-    """
-    print("Attempting to connect to the database with config:", TIDB_CONFIG)
-    # In a real implementation, you would use mysql.connector.connect(**TIDB_CONFIG)
-    # and handle connection pooling.
-    return None
-
-class DatabaseSession:
-    """
-    A placeholder class for managing database sessions.
-    """
-    def __init__(self):
-        self.connection = get_db_connection()
-
-    def close(self):
-        print("Closing the database connection.")
-        # if self.connection:
-        #     self.connection.close()
+# Base class for our ORM models.
+# All our database models will inherit from this class.
+Base = declarative_base()

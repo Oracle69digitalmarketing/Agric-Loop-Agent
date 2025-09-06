@@ -1,7 +1,12 @@
-from fastapi import FastAPI, status
-from typing import List, Union
+from fastapi import FastAPI, Depends, status
+from sqlalchemy.orm import Session
+from typing import List
 
-from . import schemas
+from . import models, schemas
+from .database import SessionLocal, engine
+
+# Create the database tables on startup
+models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="Agri-Loop Agent API",
@@ -9,10 +14,20 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# In-memory database placeholder.
-# In a real application, this would be a connection to TiDB.
-db_placeholder: List[dict] = []
+# --- Dependency ---
+def get_db():
+    """
+    Dependency that provides a database session for each request.
+    This ensures that the session is always closed after the request is finished.
+    """
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
+
+# --- API Endpoints ---
 
 @app.get("/")
 def read_root():
@@ -22,47 +37,60 @@ def read_root():
     return {"message": "Welcome to the Agri-Loop Agent API"}
 
 
-@app.post("/ingest/text", status_code=status.HTTP_201_CREATED)
-def ingest_text(data: schemas.TextInput):
+@app.post("/ingest/text", status_code=status.HTTP_201_CREATED, response_model=schemas.FarmerInput)
+def ingest_text(data: schemas.TextInputCreate, db: Session = Depends(get_db)):
     """
-    Endpoint to ingest a text message from a farmer.
+    Endpoint to ingest a text message from a farmer and save it to the database.
     """
-    db_placeholder.append(data.model_dump())
-    return {"message": f"Text input from {data.farmer_id} received successfully."}
+    db_input = models.FarmerInput(
+        farmer_id=data.farmer_id,
+        input_type='text',
+        text_content=data.text
+    )
+    db.add(db_input)
+    db.commit()
+    db.refresh(db_input)
+    return db_input
 
 
-@app.post("/ingest/image", status_code=status.HTTP_201_CREATED)
-def ingest_image(data: schemas.ImageInput):
+@app.post("/ingest/image", status_code=status.HTTP_201_CREATED, response_model=schemas.FarmerInput)
+def ingest_image(data: schemas.ImageInputCreate, db: Session = Depends(get_db)):
     """
-    Endpoint to ingest an image submission from a farmer.
+    Endpoint to ingest an image submission from a farmer and save it to the database.
     """
-    db_placeholder.append(data.model_dump())
-    return {"message": f"Image input from {data.farmer_id} received successfully."}
+    db_input = models.FarmerInput(
+        farmer_id=data.farmer_id,
+        input_type='image',
+        media_url=str(data.image_url),
+        caption=data.caption
+    )
+    db.add(db_input)
+    db.commit()
+    db.refresh(db_input)
+    return db_input
 
 
-@app.post("/ingest/voice", status_code=status.HTTP_201_CREATED)
-def ingest_voice(data: schemas.VoiceInput):
+@app.post("/ingest/voice", status_code=status.HTTP_201_CREATED, response_model=schemas.FarmerInput)
+def ingest_voice(data: schemas.VoiceInputCreate, db: Session = Depends(get_db)):
     """
-    Endpoint to ingest a voice message from a farmer.
+    Endpoint to ingest a voice message from a farmer and save it to the database.
     """
-    db_placeholder.append(data.model_dump())
-    return {"message": f"Voice input from {data.farmer_id} received successfully."}
+    db_input = models.FarmerInput(
+        farmer_id=data.farmer_id,
+        input_type='voice',
+        media_url=str(data.voice_url),
+        transcript=data.transcript
+    )
+    db.add(db_input)
+    db.commit()
+    db.refresh(db_input)
+    return db_input
 
 
-@app.get("/ingest/view", response_model=List[dict])
-def view_ingested_data():
+@app.get("/inputs", response_model=List[schemas.FarmerInput])
+def get_all_inputs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """
-    A simple endpoint to view the data currently held in the in-memory database.
-    (For debugging purposes).
+    Retrieve all farmer inputs from the database with pagination.
     """
-    return db_placeholder
-
-
-@app.post("/debug/clear-db", status_code=status.HTTP_200_OK, include_in_schema=False)
-def clear_db():
-    """
-    Endpoint to clear the in-memory database.
-    (For testing purposes only. Not included in the public API schema.)
-    """
-    db_placeholder.clear()
-    return {"message": "In-memory database cleared."}
+    inputs = db.query(models.FarmerInput).offset(skip).limit(limit).all()
+    return inputs
